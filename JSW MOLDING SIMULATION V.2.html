@@ -1,0 +1,1049 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JSW SYSCOM 5000i + 3D Moldflow CAE Pro</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/STLLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/OBJLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@600;700&family=JetBrains+Mono:wght@400;600;700&family=Plus+Jakarta+Sans:wght@400;600;700&display=swap');
+        :root { --jsw-green: #00ff9d; }
+        body { font-family: 'Plus Jakarta Sans', sans-serif; background: #05070b; color: #dbe4f0; margin: 0; overflow: hidden; user-select: none; }
+        .font-mono-tech { font-family: 'JetBrains Mono', monospace; }
+        .font-hmi { font-family: 'Chakra Petch', sans-serif; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: #070a10; }
+        ::-webkit-scrollbar-thumb { background: #1e293b; border-radius: 3px; }
+        .syscom-tab { border-bottom: 2px solid transparent; transition: 0.2s; }
+        .syscom-tab.active { background: linear-gradient(180deg, rgba(0,255,157,0.14) 0%, transparent 100%); border-bottom: 2px solid var(--jsw-green); color: var(--jsw-green); }
+        .matrix-table { width: 100%; border-collapse: separate; border-spacing: 1px; }
+        .matrix-table th { background: #0f1624; color: #7c8ea6; font-size: 9px; padding: 5px 3px; text-transform: uppercase; font-weight: 700; }
+        .matrix-table td { background: #141d2f; padding: 2px; border: 1px solid #1c2840; }
+        .matrix-table input { width: 100%; background: transparent; border: none; text-align: center; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 700; outline: none; padding: 3px 0; color: #fff; }
+        .matrix-table input:focus { background: rgba(0,255,157,0.1); color: var(--jsw-green); }
+        .jsw-field { background: #080c14; border: 1px solid #1e293b; color: #fff; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; border-radius: 6px; outline: none; }
+        .jsw-field:focus { border-color: var(--jsw-green); }
+        .glow-btn-green { background: linear-gradient(135deg, #00ff9d 0%, #00b871 100%); color: #03150d; box-shadow: 0 0 15px rgba(0,255,157,0.3); }
+        .cae-pin { position: absolute; transform: translate(-50%, -100%); pointer-events: none; z-index: 40; padding-bottom: 20px; }
+        .cae-pin::after { content: ''; position: absolute; bottom: 0; left: 50%; width: 2px; height: 20px; background: currentColor; transform: translateX(-50%); }
+        .cae-pin-dot { position: absolute; bottom: -4px; left: 50%; width: 8px; height: 8px; border-radius: 50%; background: currentColor; transform: translateX(-50%); border: 2px solid #fff; }
+    </style>
+</head>
+<body class="h-screen w-screen flex flex-col bg-[#05070b]">
+
+    <!-- TOAST -->
+    <div id="toast" class="fixed top-4 left-1/2 -translate-x-1/2 z-[9999] opacity-0 pointer-events-none transition-all duration-300 bg-[#0c1322]/95 border border-[#1e2f47] text-white px-4 py-2 rounded-xl shadow-2xl flex items-center gap-2.5">
+        <i id="toastIcon" class="fas fa-microchip text-emerald-400"></i>
+        <span id="toastMsg" class="text-xs font-semibold">Ready</span>
+    </div>
+
+    <!-- SETUP SHEET MODAL -->
+    <div id="setupSheetModal" class="fixed inset-0 z-[9000] bg-black/75 backdrop-blur-sm hidden items-center justify-center p-4">
+        <div class="bg-[#0c121e] border border-[#1e2d4a] rounded-2xl max-w-2xl w-full max-h-[85vh] flex flex-col shadow-2xl overflow-hidden">
+            <div class="px-5 py-3 bg-[#080d16] border-b border-[#182338] flex items-center justify-between">
+                <h3 class="font-hmi font-bold text-sm text-white uppercase"><i class="fas fa-file-invoice text-emerald-400 mr-2"></i>JSW Scientific Molding Setup Sheet (IATF-16949)</h3>
+                <button onclick="toggleSetupSheetModal(false)" class="w-7 h-7 rounded bg-[#141e30] text-slate-400 hover:text-white"><i class="fas fa-times"></i></button>
+            </div>
+            <div id="setupSheetContent" class="p-4 overflow-y-auto space-y-3 text-xs font-mono-tech"></div>
+            <div class="px-5 py-3 bg-[#080d16] border-t border-[#182338] flex justify-end gap-2">
+                <button onclick="downloadRecipeJSON()" class="px-3 py-1.5 rounded-lg bg-[#162238] text-cyan-400 border border-cyan-500/30 text-xs font-bold"><i class="fas fa-download mr-1"></i>Export JSON</button>
+                <button onclick="window.print()" class="px-4 py-1.5 rounded-lg glow-btn-green text-xs font-bold"><i class="fas fa-print mr-1"></i>Print</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- HEADER -->
+    <header class="h-14 bg-[#080c14] border-b border-[#152033] px-4 flex items-center justify-between shrink-0 z-50">
+        <div class="flex items-center gap-3">
+            <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-[#00ff9d] to-emerald-700 flex items-center justify-center font-black text-black font-hmi text-lg">J</div>
+            <div>
+                <div class="flex items-center gap-2">
+                    <h1 class="font-hmi text-sm font-bold tracking-wider text-white">JSW SYSCOM 5000i</h1>
+                    <span class="text-[8px] px-1.5 py-0.5 rounded bg-emerald-500/10 border border-emerald-500/30 text-[#00ff9d] font-mono-tech">IND-4.0 PRO</span>
+                </div>
+                <p class="text-[8px] text-slate-400 font-mono-tech uppercase">Scientific Molding & 3D Rheology Twin</p>
+            </div>
+
+            <div class="hidden xl:flex items-center gap-3 px-3 py-1 rounded-xl bg-[#0c121e] border border-[#172338] ml-2">
+                <div><span class="text-[7.5px] text-slate-500 block uppercase font-bold">Melt / Res.</span><span id="headerMeltStatus" class="text-[10.5px] font-mono-tech font-bold text-emerald-400">225°C (2.1m)</span></div>
+                <div class="h-5 w-px bg-[#1b2840]"></div>
+                <div><span class="text-[7.5px] text-slate-500 block uppercase font-bold">Clamp Force</span><span id="headerClampStatus" class="text-[10.5px] font-mono-tech font-bold text-white">128T / 180T</span></div>
+                <div class="h-5 w-px bg-[#1b2840]"></div>
+                <div><span class="text-[7.5px] text-slate-500 block uppercase font-bold">Gate Shear</span><span id="headerGateShear" class="text-[10.5px] font-mono-tech font-bold text-cyan-400">14,200 s⁻¹</span></div>
+                <div class="h-5 w-px bg-[#1b2840]"></div>
+                <div><span class="text-[7.5px] text-slate-500 block uppercase font-bold">Shot Weight</span><span id="headerShotWeight" class="text-[10.5px] font-mono-tech font-bold text-amber-400">42.6g (48%)</span></div>
+                <div class="h-5 w-px bg-[#1b2840]"></div>
+                <div><span class="text-[7.5px] text-slate-500 block uppercase font-bold">Unit Cost</span><span id="headerPowerKW" class="text-[10.5px] font-mono-tech font-bold text-purple-400">6.8kW ($0.12)</span></div>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2">
+            <div class="flex bg-[#060910] p-1 rounded-lg border border-[#182338]">
+                <button onclick="setLayoutMode('split')" id="btnViewSplit" class="px-2 py-1 rounded text-[10px] font-bold bg-[#182338] text-white">SPLIT</button>
+                <button onclick="setLayoutMode('param')" id="btnViewParam" class="px-2 py-1 rounded text-[10px] font-bold text-slate-400">HMI</button>
+                <button onclick="setLayoutMode('cae')" id="btnViewCAE" class="px-2 py-1 rounded text-[10px] font-bold text-slate-400">3D CAE</button>
+            </div>
+            <button onclick="toggleSetupSheetModal(true)" class="bg-[#101829] hover:bg-[#19253f] text-cyan-300 border border-cyan-500/30 font-bold px-2.5 py-1.5 rounded-lg text-[10.5px]"><i class="fas fa-clipboard-list mr-1"></i>SHEET</button>
+            <button onclick="runSmartAutoTune()" class="bg-[#101c29] hover:bg-[#16293d] text-[#00ff9d] border border-emerald-500/40 font-bold px-2.5 py-1.5 rounded-lg text-[10.5px]"><i class="fas fa-wand-magic-sparkles mr-1"></i>AI TUNE</button>
+            <button onclick="executeMoldingSimulation(true)" class="glow-btn-green font-hmi font-bold py-1.5 px-3 rounded-lg text-[11px] uppercase"><i class="fas fa-bolt mr-1"></i>SIMULATE</button>
+        </div>
+    </header>
+
+    <!-- MAIN WORKSPACE -->
+    <div class="flex-1 flex overflow-hidden relative">
+
+        <!-- LEFT PANE: JSW SYSCOM HMI -->
+        <div id="paramPane" class="w-full lg:w-1/2 flex flex-col bg-[#070a11] border-r border-[#141d2e] z-20">
+            <div class="flex bg-[#0a0f1a] border-b border-[#162033] shrink-0 overflow-x-auto">
+                <button onclick="switchHMITab('tab-mat', this)" class="syscom-tab active px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap">1. MAT & MOLD</button>
+                <button onclick="switchHMITab('tab-barrel', this)" class="syscom-tab px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap text-slate-400">2. TEMP & MTC</button>
+                <button onclick="switchHMITab('tab-vp', this)" class="syscom-tab px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap text-slate-400">3. INJECT (V-P)</button>
+                <button onclick="switchHMITab('tab-screw', this)" class="syscom-tab px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap text-slate-400">4. DOSING & COOL</button>
+                <button onclick="switchHMITab('tab-scientific', this)" class="syscom-tab px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap text-slate-400">5. SCIENTIFIC (RJG)</button>
+                <button onclick="switchHMITab('tab-mes', this)" class="syscom-tab px-3 py-2.5 text-[10px] font-bold font-hmi uppercase whitespace-nowrap text-slate-400">6. MES & COST</button>
+            </div>
+
+            <div class="flex-1 overflow-y-auto p-3 space-y-3" oninput="handleRealtimeParamChange()">
+                <!-- TAB 1 -->
+                <div id="tab-mat" class="hmi-tab-body grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2 border-b border-[#19263d] pb-1">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-emerald-400">Polymer Resin DB</span>
+                            <span id="badgeMorphology" class="text-[8.5px] px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-300 font-mono-tech">SEMI-CRYSTALLINE</span>
+                        </div>
+                        <select id="selMaterial" onchange="applyResinProperties()" class="jsw-field w-full p-1.5 mb-2 bg-[#11192b]">
+                            <option value="PP">PP (Polypropylene Homo)</option>
+                            <option value="ABS">ABS (High Impact Toyolac)</option>
+                            <option value="PC">PC (Optical Makrolon)</option>
+                            <option value="PA66">PA66-GF30 (Glass Filled)</option>
+                            <option value="POM">POM (Polyacetal Duracon)</option>
+                            <option value="PBT">PBT (Connector Grade)</option>
+                            <option value="PMMA">PMMA (Optical Acrylic)</option>
+                            <option value="PEEK">PEEK (Aerospace Grade)</option>
+                        </select>
+                        <div class="grid grid-cols-2 gap-1 text-[10px] font-mono-tech">
+                            <div class="p-1.5 rounded bg-[#080c14] flex justify-between"><span class="text-slate-500">MFI/ρ:</span><span id="txtResinMFI" class="text-emerald-400">12g/0.75</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14] flex justify-between"><span class="text-slate-500">Alpha:</span><span id="txtResinAlpha" class="text-cyan-400">0.088</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14] flex justify-between"><span class="text-slate-500">Shear:</span><span id="txtResinShearLimit" class="text-rose-400">60,000</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14] flex justify-between"><span class="text-slate-500">Shrink:</span><span id="txtResinShrink" class="text-amber-400">1.4-1.8%</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14] flex justify-between col-span-2"><span class="text-slate-500">Drying:</span><span id="txtResinDrying" class="text-slate-200">No Drying Req</span></div>
+                        </div>
+                    </div>
+
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2 border-b border-[#19263d] pb-1">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-cyan-400">Machine & Cavity</span>
+                            <span id="txtScrewDiaBadge" class="text-[8.5px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 font-mono-tech">Screw Ø40mm</span>
+                        </div>
+                        <select id="selMachine" onchange="handleRealtimeParamChange()" class="jsw-field w-full p-1.5 mb-2 bg-[#11192b]">
+                            <option value="110">JSW J110AD (110T / Ø36mm)</option>
+                            <option value="180" selected>JSW J180AD (180T / Ø40mm)</option>
+                            <option value="280">JSW J280AD (280T / Ø50mm)</option>
+                            <option value="350">JSW J350AD (350T / Ø58mm)</option>
+                            <option value="550">JSW J550AD (550T / Ø68mm)</option>
+                            <option value="850">JSW J850AD (850T / Ø84mm)</option>
+                            <option value="1300">JSW J1300AD (1300T / Ø100mm)</option>
+                        </select>
+                        <div class="grid grid-cols-3 gap-1.5 mb-1.5">
+                            <div><label class="text-[8px] text-slate-400 block">Area/Cav(cm²)</label><input type="number" id="inpProjArea" value="145" class="jsw-field w-full p-1 text-center text-amber-400"></div>
+                            <div><label class="text-[8px] text-slate-400 block">Cavities</label><input type="number" id="inpCavities" value="2" min="1" class="jsw-field w-full p-1 text-center text-emerald-400"></div>
+                            <div><label class="text-[8px] text-slate-400 block">Wall t (mm)</label><input type="number" id="inpWallThick" value="2.2" step="0.1" class="jsw-field w-full p-1 text-center text-cyan-400"></div>
+                        </div>
+                        <div class="grid grid-cols-2 gap-1.5">
+                            <div><label class="text-[8px] text-slate-400 block">Flow Len L (mm)</label><input type="number" id="inpFlowLength" value="160" class="jsw-field w-full p-1 text-center text-white"></div>
+                            <div><label class="text-[8px] text-slate-400 block">Runner Type</label><select id="selRunnerType" onchange="handleRealtimeParamChange()" class="jsw-field w-full p-1 bg-[#11192b] text-cyan-300"><option value="cold">Cold Runner</option><option value="hot">Hot Runner</option></select></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 2 -->
+                <div id="tab-barrel" class="hmi-tab-body hidden space-y-2.5">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <h3 class="text-[10.5px] font-bold font-hmi uppercase text-amber-400 mb-2">Barrel Heater Zones (°C)</h3>
+                        <table class="matrix-table">
+                            <thead><tr><th>Nozzle</th><th>Zone H1</th><th>Zone H2</th><th>Zone H3</th><th>Zone H4</th><th>Feed H5</th></tr></thead>
+                            <tbody><tr>
+                                <td><input type="number" id="tempNH" value="225"></td>
+                                <td><input type="number" id="tempH1" value="225"></td>
+                                <td><input type="number" id="tempH2" value="215"></td>
+                                <td><input type="number" id="tempH3" value="205"></td>
+                                <td><input type="number" id="tempH4" value="190"></td>
+                                <td><input type="number" id="tempH5" value="60"></td>
+                            </tr></tbody>
+                        </table>
+                    </div>
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-cyan-400">Mold MTC & Turbulent Cooling</span>
+                            <span id="badgeReynolds" class="text-[9px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 font-mono-tech font-bold">Re: 5,420 (TURBULENT)</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2">
+                            <div><label class="text-[8.5px] text-slate-400 block">Fixed Cavity (°C)</label><input type="number" id="tempMoldFix" value="45" class="jsw-field w-full p-1.5 text-center text-cyan-300"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Moving Core (°C)</label><input type="number" id="tempMoldMov" value="45" class="jsw-field w-full p-1.5 text-center text-cyan-300"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">MTC Flow (L/min)</label><input type="number" id="inpCoolantFlow" value="6.5" step="0.5" class="jsw-field w-full p-1.5 text-center text-emerald-400"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 3 -->
+                <div id="tab-vp" class="hmi-tab-body hidden space-y-2.5">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-emerald-400">5-Step Injection Velocity</span>
+                            <div class="flex items-center gap-1.5"><span class="text-[9px] font-mono-tech text-amber-400">V-P Pos (mm):</span><input type="number" id="inpVPSwitch" value="10" class="jsw-field w-12 p-0.5 text-center text-amber-400"></div>
+                        </div>
+                        <table class="matrix-table mb-2.5">
+                            <thead><tr><th>STEP</th><th>V1</th><th>V2</th><th>V3</th><th>V4</th><th>V5</th></tr></thead>
+                            <tbody>
+                                <tr><td class="text-[9px] font-mono-tech text-slate-400">Vel (%)</td><td><input type="number" id="v_1" value="35"></td><td><input type="number" id="v_2" value="65"></td><td><input type="number" id="v_3" value="80"></td><td><input type="number" id="v_4" value="55"></td><td><input type="number" id="v_5" value="25"></td></tr>
+                                <tr><td class="text-[9px] font-mono-tech text-slate-400">Lim (MPa)</td><td><input type="number" id="p_1" value="135"></td><td><input type="number" id="p_2" value="155"></td><td><input type="number" id="p_3" value="175"></td><td><input type="number" id="p_4" value="155"></td><td><input type="number" id="p_5" value="130"></td></tr>
+                                <tr><td class="text-[9px] font-mono-tech text-slate-400">Pos (mm)</td><td><input type="number" id="x_1" value="54"></td><td><input type="number" id="x_2" value="44"></td><td><input type="number" id="x_3" value="28"></td><td><input type="number" id="x_4" value="16"></td><td><input type="number" id="x_5" value="10" disabled></td></tr>
+                            </tbody>
+                        </table>
+                        <span class="text-[10.5px] font-bold font-hmi uppercase text-amber-400 block mb-1">3-Step Holding Pressure</span>
+                        <table class="matrix-table">
+                            <thead><tr><th>STEP</th><th>HP 1 (Pack)</th><th>HP 2 (Hold)</th><th>HP 3 (Stress)</th></tr></thead>
+                            <tbody>
+                                <tr><td class="text-[9px] font-mono-tech text-slate-400">Press (MPa)</td><td><input type="number" id="hp_1" value="68"></td><td><input type="number" id="hp_2" value="52"></td><td><input type="number" id="hp_3" value="35"></td></tr>
+                                <tr><td class="text-[9px] font-mono-tech text-slate-400">Time (s)</td><td><input type="number" id="ht_1" value="2.0" step="0.2"></td><td><input type="number" id="ht_2" value="2.2" step="0.2"></td><td><input type="number" id="ht_3" value="1.0" step="0.2"></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- TAB 4 -->
+                <div id="tab-screw" class="hmi-tab-body hidden">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-cyan-400">Dosing & Cooling Timers</span>
+                            <span id="txtReqShotHint" class="text-[9.5px] font-mono-tech text-cyan-400 font-bold">Ideal Shot: 62.0 mm</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div><label class="text-[8.5px] text-slate-400 block">Screw RPM</label><input type="number" id="inpRPM" value="85" class="jsw-field w-full p-1.5 text-center text-emerald-400"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Back Press (MPa)</label><input type="number" id="inpBP" value="8.5" step="0.5" class="jsw-field w-full p-1.5 text-center text-amber-400"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Shot Size (mm)</label><input type="number" id="inpShotSize" value="62" class="jsw-field w-full p-1.5 text-center text-cyan-400"></div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2">
+                            <div><label class="text-[8.5px] text-slate-400 block">Cooling (s)</label><input type="number" id="inpCoolTime" value="12.5" step="0.5" class="jsw-field w-full p-1.5 text-center text-cyan-300"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Cushion (mm)</label><input type="number" id="inpCushion" value="4.5" step="0.5" class="jsw-field w-full p-1.5 text-center text-rose-400"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Suck-Back (mm)</label><input type="number" id="inpSuckBack" value="3.0" step="0.5" class="jsw-field w-full p-1.5 text-center text-purple-400"></div>
+                            <div><label class="text-[8.5px] text-slate-400 block">Dry Cycle (s)</label><input type="number" id="inpDryCycle" value="2.4" step="0.2" class="jsw-field w-full p-1.5 text-center text-slate-300"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- TAB 5 -->
+                <div id="tab-scientific" class="hmi-tab-body hidden">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a] grid grid-cols-3 gap-2 font-mono-tech">
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">FLOW RATIO (L/t)</span><span id="sciLtRatio" class="text-xs font-bold text-white">72.7 : 1</span><span id="sciLtStatus" class="text-[8px] text-emerald-400 block">Safe (<150)</span></div>
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">BARREL UTIL %</span><span id="sciBarrelUtil" class="text-xs font-bold text-emerald-400">48.5 %</span><span class="text-[8px] text-slate-400 block">Window: 25-65%</span></div>
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">RESIDENCE TIME</span><span id="sciResidenceTime" class="text-xs font-bold text-cyan-400">2.1 min</span><span class="text-[8px] text-slate-400 block">Max: 5.0 min</span></div>
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">THEO. MIN COOL</span><span id="sciMinCool" class="text-xs font-bold text-amber-400">10.8 s</span><span class="text-[8px] text-slate-400 block">Ballman Eq</span></div>
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">EFF. VISCOSITY</span><span id="sciEffVisc" class="text-xs font-bold text-purple-400">192 Pa·s</span><span class="text-[8px] text-slate-400 block">Cross-WLF</span></div>
+                        <div class="p-2 rounded bg-[#080c14] border border-[#162238]"><span class="text-[8px] text-slate-500 block">SINK MARK IDX</span><span id="sciSinkIndex" class="text-xs font-bold text-emerald-400">1.15 %</span><span class="text-[8px] text-slate-400 block">Target < 2.0%</span></div>
+                    </div>
+                </div>
+
+                <!-- TAB 6 -->
+                <div id="tab-mes" class="hmi-tab-body hidden">
+                    <div class="bg-[#0d1320] p-3 rounded-xl border border-[#18243a]">
+                        <div class="flex justify-between items-center mb-2">
+                            <span class="text-[10.5px] font-bold font-hmi uppercase text-amber-400">MES Production & Costing</span>
+                            <span id="mesHourlyOutput" class="text-[9.5px] font-mono-tech text-emerald-400 font-bold">375 pcs/hr</span>
+                        </div>
+                        <div class="grid grid-cols-3 gap-2 mb-2">
+                            <div><label class="text-[8px] text-slate-400 block">Batch Order (pcs)</label><input type="number" id="inpBatchQty" value="10000" class="jsw-field w-full p-1 text-center"></div>
+                            <div><label class="text-[8px] text-slate-400 block">Resin ($/kg)</label><input type="number" id="inpResinPrice" value="2.10" step="0.1" class="jsw-field w-full p-1 text-center text-emerald-400"></div>
+                            <div><label class="text-[8px] text-slate-400 block">Mach Rate ($/hr)</label><input type="number" id="inpMachineRate" value="28.0" class="jsw-field w-full p-1 text-center text-amber-400"></div>
+                        </div>
+                        <div class="grid grid-cols-4 gap-2 font-mono-tech text-center">
+                            <div class="p-1.5 rounded bg-[#080c14]"><span class="text-[7.5px] text-slate-500 block">PART WT</span><span id="mesPartWt" class="text-xs font-bold">18.2 g</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14]"><span class="text-[7.5px] text-slate-500 block">RESIN REQ</span><span id="mesTotalResinKg" class="text-xs font-bold text-cyan-400">214 kg</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14]"><span class="text-[7.5px] text-slate-500 block">LEAD TIME</span><span id="mesLeadTime" class="text-xs font-bold text-amber-400">26.6 hrs</span></div>
+                            <div class="p-1.5 rounded bg-[#080c14]"><span class="text-[7.5px] text-slate-500 block">COST / PC</span><span id="mesCostPerPart" class="text-xs font-bold text-emerald-400">$0.119</span></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- CHART -->
+                <div class="bg-[#0b111d] border border-[#18243a] rounded-xl p-2.5">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <div class="flex gap-1 bg-[#070b12] p-1 rounded-lg border border-[#162236]">
+                            <button onclick="switchChartMode('vp')" id="btnChartVP" class="px-2 py-0.5 rounded text-[9px] font-mono-tech font-bold bg-emerald-500 text-black">V-P WAVEFORM</button>
+                            <button onclick="switchChartMode('viscosity')" id="btnChartVisc" class="px-2 py-0.5 rounded text-[9px] font-mono-tech font-bold text-slate-400">VISCOSITY CURVE</button>
+                            <button onclick="switchChartMode('gateseal')" id="btnChartSeal" class="px-2 py-0.5 rounded text-[9px] font-mono-tech font-bold text-slate-400">GATE SEAL / PvT</button>
+                        </div>
+                        <span class="text-[8.5px] font-mono-tech text-emerald-400 font-bold">LIVE TELEMETRY</span>
+                    </div>
+                    <div class="h-36 w-full"><canvas id="syscomChart"></canvas></div>
+                </div>
+
+                <!-- AI CO-PILOT DIAGNOSTICS -->
+                <div class="bg-[#0c1322] border border-[#1c2942] rounded-xl p-3 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <h4 class="text-xs font-hmi font-bold uppercase text-white"><i class="fas fa-robot text-emerald-400 mr-1.5"></i>JSW Mieruka AI Process Co-Pilot</h4>
+                        <span id="badgeMoldingStatus" class="px-2 py-0.5 rounded text-[9.5px] font-mono-tech font-bold bg-emerald-950/70 border border-emerald-600 text-emerald-400">OPTIMAL</span>
+                    </div>
+                    <div id="defectsList" class="space-y-1.5 text-xs"></div>
+                    <div class="grid grid-cols-4 gap-2 pt-1.5 border-t border-[#172338] text-center font-mono-tech">
+                        <div class="p-1 rounded bg-[#070b12]"><span class="text-[7.5px] text-slate-500 block">CYCLE TIME</span><span id="resCycleTime" class="text-xs font-bold">19.2 s</span></div>
+                        <div class="p-1 rounded bg-[#070b12]"><span class="text-[7.5px] text-slate-500 block">REQ CLAMP</span><span id="resClampReq" class="text-xs font-bold text-emerald-400">128 T</span></div>
+                        <div class="p-1 rounded bg-[#070b12]"><span class="text-[7.5px] text-slate-500 block">GATE &Delta;P</span><span id="resGateDeltaP" class="text-xs font-bold text-amber-400">18.4 MPa</span></div>
+                        <div class="p-1 rounded bg-[#070b12]"><span class="text-[7.5px] text-slate-500 block">GATE SEAL</span><span id="resGateFreeze" class="text-xs font-bold text-cyan-400">3.8 s</span></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT PANE: 3D MOLDFLOW CAE -->
+        <div id="caePane" class="w-full lg:w-1/2 flex flex-col bg-[#04060a] relative h-full">
+            <!-- Top Toolbar -->
+            <div class="absolute top-3 left-3 right-12 z-30 flex flex-wrap items-center gap-1.5">
+                <div class="bg-[#0c1322]/90 border border-[#1d2c47] rounded-xl p-1 flex items-center gap-1">
+                    <span class="text-[8px] font-mono-tech text-slate-400 pl-1 font-bold">CAD:</span>
+                    <select id="selPreset3D" onchange="loadPresetCAD(this.value)" class="bg-[#131e36] text-white text-[10.5px] font-semibold py-1 px-1.5 rounded-lg outline-none">
+                        <option value="phone">Smart Case (Thin-Wall)</option>
+                        <option value="bracket">Auto Bumper Bracket</option>
+                        <option value="gear">Precision Helical Gear</option>
+                        <option value="medical">Medical Syringe Flange</option>
+                        <option value="cup">Packaging Tumbler Cup</option>
+                    </select>
+                </div>
+                <div class="bg-[#0c1322]/90 border border-[#1d2c47] rounded-xl p-1 flex items-center gap-1">
+                    <span class="text-[8px] font-mono-tech text-slate-400 pl-1 font-bold">GATE:</span>
+                    <select id="selGateType" onchange="onGateParameterModified()" class="bg-[#131e36] text-white text-[10.5px] font-semibold py-1 px-1.5 rounded-lg outline-none">
+                        <option value="pin">Pin / Sprue</option>
+                        <option value="edge">Edge / Fan</option>
+                        <option value="tunnel">Submarine</option>
+                    </select>
+                </div>
+                <div class="bg-[#0c1322]/90 border border-cyan-500/40 rounded-xl p-1 flex items-center gap-1">
+                    <span class="text-[8px] font-mono-tech text-cyan-400 pl-1 font-bold">Ø:</span>
+                    <input type="number" id="inpGateSize" value="1.6" min="0.4" max="6.0" step="0.1" oninput="onGateSizeManualInput(parseFloat(this.value))" class="w-11 bg-[#131e36] text-center font-mono-tech font-bold text-[10.5px] text-white py-0.5 rounded">
+                    <span class="text-[8px] font-mono-tech text-slate-400 pr-1">mm</span>
+                </div>
+                <button onclick="toggleProbeMode()" id="btnProbeMode" class="bg-[#0c1322]/90 border border-[#1d2c47] text-slate-300 rounded-xl px-2.5 py-1.5 text-[10px] font-mono-tech font-bold"><i class="fas fa-crosshairs text-cyan-400 mr-1"></i>PROBE</button>
+                <button onclick="toggleCoolingPipes()" id="btnCoolingPipes" class="bg-[#0c1322]/90 border border-[#1d2c47] text-slate-300 rounded-xl px-2.5 py-1.5 text-[10px] font-mono-tech font-bold"><i class="fas fa-snowflake text-sky-400 mr-1"></i>COOLING</button>
+                <label class="bg-[#0c1322]/90 border border-[#1d2c47] text-white rounded-xl px-2.5 py-1.5 text-[10px] font-semibold cursor-pointer"><i class="fas fa-upload text-emerald-400 mr-1"></i>STL/OBJ<input type="file" id="fileUploader" accept=".stl,.obj" class="hidden" onchange="handleCustomCADUpload(event)"></label>
+            </div>
+
+            <!-- View Buttons -->
+            <div class="absolute top-3 right-3 z-30 bg-[#0c1322]/90 border border-[#1d2c47] rounded-xl p-1 flex flex-col gap-1">
+                <button onclick="setCADView('iso')" class="w-7 h-7 rounded bg-[#141f36] hover:bg-cyan-600 text-xs font-mono-tech font-bold">ISO</button>
+                <button onclick="setCADView('top')" class="w-7 h-7 rounded bg-[#141f36] hover:bg-cyan-600 text-xs font-mono-tech font-bold">TOP</button>
+                <button onclick="toggleMeshWireframe()" class="w-7 h-7 rounded bg-[#141f36] hover:bg-purple-600 text-xs"><i class="fas fa-border-all"></i></button>
+                <button onclick="setCADView('fit')" class="w-7 h-7 rounded bg-emerald-600/30 text-emerald-400 text-xs"><i class="fas fa-compress"></i></button>
+            </div>
+
+            <!-- 6 CAE Contour Modes -->
+            <div class="absolute top-14 left-3 z-30 bg-[#0c1322]/90 border border-[#1d2c47] rounded-xl p-1 flex flex-wrap gap-1 mt-1">
+                <button onclick="setCAEResultMode('fill')" id="btnModeFill" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech bg-emerald-500 text-black">1. FILL TIME</button>
+                <button onclick="setCAEResultMode('temp')" id="btnModeTemp" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400">2. MELT TEMP</button>
+                <button onclick="setCAEResultMode('press')" id="btnModePress" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400">3. CAVITY PRESS</button>
+                <button onclick="setCAEResultMode('shear')" id="btnModeShear" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400">4. SHEAR STRESS</button>
+                <button onclick="setCAEResultMode('sink')" id="btnModeSink" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400">5. SINK MARK</button>
+                <button onclick="setCAEResultMode('warp')" id="btnModeWarp" class="px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400">6. WARPAGE</button>
+            </div>
+
+            <!-- Screw HUD -->
+            <div class="absolute top-28 left-3 z-30 bg-[#0a101d]/95 border border-[#1a2842] border-l-4 border-l-emerald-400 p-2.5 rounded-xl w-64 pointer-events-none mt-1 space-y-1.5">
+                <div class="flex justify-between items-center border-b border-[#18253d] pb-1">
+                    <span id="hudPhaseTitle" class="text-[10px] font-hmi font-bold text-emerald-400 uppercase">1. INJECTION FILL</span>
+                    <span id="hudSimTime" class="text-[10px] font-mono-tech font-bold text-white">1.80 s</span>
+                </div>
+                <div class="grid grid-cols-3 gap-1 text-center font-mono-tech text-[10px]">
+                    <div class="bg-[#060a11] p-1 rounded"><span class="text-[7px] text-slate-500 block">VEL</span><span id="hudSpeed" class="font-bold text-emerald-400">65%</span></div>
+                    <div class="bg-[#060a11] p-1 rounded"><span class="text-[7px] text-slate-500 block">PRESS</span><span id="hudPress" class="font-bold text-amber-400">145 MPa</span></div>
+                    <div class="bg-[#060a11] p-1 rounded"><span class="text-[7px] text-slate-500 block">RING</span><span id="hudCheckRing" class="font-bold text-cyan-400">LOCKED</span></div>
+                </div>
+                <div class="h-5 w-full bg-[#1b0d0d] rounded border border-[#3b1717] relative overflow-hidden flex items-center px-2">
+                    <div id="hudMeltGradient" class="absolute left-0 top-0 bottom-0 bg-gradient-to-r from-orange-600 to-rose-500 w-full origin-left"></div>
+                    <div id="hudScrewBar" class="absolute top-0.5 bottom-0.5 w-3 bg-white rounded z-10" style="left: 15%;"></div>
+                    <div class="w-full flex justify-between text-[6.5px] font-mono-tech text-white/80 z-20"><span>CUSHION</span><span>V-P</span><span>SHOT</span></div>
+                </div>
+            </div>
+
+            <!-- Probe Tooltip -->
+            <div id="probeTooltip" class="fixed z-50 pointer-events-none hidden bg-[#090f1c]/95 border border-cyan-400/60 rounded-xl p-2.5 shadow-2xl text-[10px] font-mono-tech text-white min-w-[175px]">
+                <div class="flex justify-between border-b border-[#1b2b48] pb-1 mb-1 text-cyan-400 font-bold"><span>NODE PROBE</span><span id="probeNodeId">#0</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Fill Time:</span><span id="probeFillTime" class="text-emerald-400 font-bold">0.8s</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Melt Temp:</span><span id="probeTemp" class="text-amber-400 font-bold">225°C</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Cavity Press:</span><span id="probePress" class="text-cyan-300 font-bold">65 MPa</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Shear Stress:</span><span id="probeShear" class="text-rose-400 font-bold">0.28 MPa</span></div>
+                <div class="flex justify-between"><span class="text-slate-400">Shrinkage:</span><span id="probeShrink" class="text-purple-300 font-bold">1.4%</span></div>
+            </div>
+
+            <!-- 3D Canvas -->
+            <div id="threeCanvasWrapper" class="w-full h-full relative cursor-grab active:cursor-grabbing">
+                <div id="pinsOverlay" class="absolute inset-0 pointer-events-none z-30 overflow-hidden"></div>
+            </div>
+
+            <!-- Timeline -->
+            <div class="absolute bottom-3 left-3 right-3 z-30 bg-[#0b111e]/95 border border-[#1c2a44] p-2.5 rounded-2xl flex items-center gap-3">
+                <button onclick="toggleCAEPlayPause()" class="w-9 h-9 rounded-xl bg-emerald-500 text-black flex items-center justify-center font-bold text-xs"><i class="fas fa-play" id="iconPlay"></i></button>
+                <button onclick="restartCAESimulation()" class="w-8 h-8 rounded-xl bg-[#152035] text-slate-300 flex items-center justify-center text-xs"><i class="fas fa-rotate-left"></i></button>
+                <input type="range" id="simTimeline" min="0" max="100" step="0.5" value="100" oninput="userScrubTimeline(parseFloat(this.value))" class="flex-1 accent-emerald-400 h-1.5 bg-[#172338] rounded-lg cursor-pointer">
+                <span id="txtTimelinePercent" class="text-xs font-mono-tech font-bold text-emerald-400 w-11 text-right">100%</span>
+                <div class="border-l border-[#1d2d48] pl-3 flex items-center gap-2">
+                    <span id="txtGateCount" class="text-[10.5px] font-mono-tech font-bold text-cyan-300">1x PIN (1.6mm)</span>
+                    <button onclick="resetGates()" class="px-2 py-1 rounded bg-rose-950/50 text-rose-400 border border-rose-800/50 text-[9px] font-mono-tech font-bold">CLEAR</button>
+                </div>
+            </div>
+
+            <!-- Legend -->
+            <div class="absolute bottom-20 right-3 z-30 bg-[#0b111e]/90 border border-[#1a263d] px-3 py-2 rounded-xl w-48 pointer-events-none">
+                <div class="flex justify-between text-[8.5px] font-mono-tech font-bold mb-1">
+                    <span id="legendTitle" class="text-slate-300 uppercase">Melt Front</span>
+                    <span id="legendUnit" class="text-emerald-400">0 - 1.8s</span>
+                </div>
+                <div class="h-2 w-full rounded" style="background: linear-gradient(to right, #0011ff, #00d4ff, #00ff73, #fffb00, #ff0037);"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const RESIN_DB = {
+            'PP': { name: 'Polypropylene Homo', morph: 'SEMI-CRYSTALLINE', meltTemp: 225, moldTemp: 45, ejectTemp: 95, mfi: 12, density: 0.75, solidDensity: 0.90, alpha: 0.088, shrink: '1.4-1.8%', shrinkNum: 1.6, viscRef: 110, shearLimit: 60000, drying: 'No Drying Req' },
+            'ABS': { name: 'ABS High Impact', morph: 'AMORPHOUS', meltTemp: 240, moldTemp: 60, ejectTemp: 88, mfi: 19, density: 0.94, solidDensity: 1.04, alpha: 0.095, shrink: '0.4-0.7%', shrinkNum: 0.55, viscRef: 170, shearLimit: 50000, drying: '80°C x 3h' },
+            'PC': { name: 'Polycarbonate', morph: 'AMORPHOUS', meltTemp: 295, moldTemp: 90, ejectTemp: 135, mfi: 10, density: 1.06, solidDensity: 1.20, alpha: 0.110, shrink: '0.5-0.7%', shrinkNum: 0.6, viscRef: 310, shearLimit: 40000, drying: '120°C x 4h' },
+            'PA66': { name: 'PA66-GF30', morph: 'SEMI-CRYSTALLINE', meltTemp: 285, moldTemp: 85, ejectTemp: 140, mfi: 22, density: 1.18, solidDensity: 1.36, alpha: 0.125, shrink: '0.3-0.6%', shrinkNum: 0.45, viscRef: 145, shearLimit: 75000, drying: '80°C x 4h' },
+            'POM': { name: 'POM Polyacetal', morph: 'SEMI-CRYSTALLINE', meltTemp: 205, moldTemp: 80, ejectTemp: 115, mfi: 9, density: 1.15, solidDensity: 1.41, alpha: 0.085, shrink: '1.8-2.2%', shrinkNum: 2.0, viscRef: 200, shearLimit: 45000, drying: '85°C x 2h' },
+            'PBT': { name: 'PBT Connector', morph: 'SEMI-CRYSTALLINE', meltTemp: 255, moldTemp: 70, ejectTemp: 120, mfi: 16, density: 1.12, solidDensity: 1.31, alpha: 0.105, shrink: '1.2-1.8%', shrinkNum: 1.5, viscRef: 160, shearLimit: 55000, drying: '120°C x 3h' },
+            'PMMA': { name: 'PMMA Optical', morph: 'AMORPHOUS', meltTemp: 235, moldTemp: 65, ejectTemp: 85, mfi: 8, density: 1.05, solidDensity: 1.19, alpha: 0.092, shrink: '0.3-0.6%', shrinkNum: 0.45, viscRef: 260, shearLimit: 35000, drying: '85°C x 3h' },
+            'PEEK': { name: 'PEEK Aerospace', morph: 'SEMI-CRYSTALLINE', meltTemp: 375, moldTemp: 175, ejectTemp: 210, mfi: 7, density: 1.14, solidDensity: 1.30, alpha: 0.130, shrink: '1.1-1.4%', shrinkNum: 1.25, viscRef: 380, shearLimit: 50000, drying: '150°C x 3h' }
+        };
+
+        const MACHINE_DB = {
+            '110': { ton: 110, screwDia: 36, maxShotMm: 140, maxInjVel: 200, servoKw: 4.8 },
+            '180': { ton: 180, screwDia: 40, maxShotMm: 160, maxInjVel: 180, servoKw: 6.8 },
+            '280': { ton: 280, screwDia: 50, maxShotMm: 200, maxInjVel: 165, servoKw: 9.5 },
+            '350': { ton: 350, screwDia: 58, maxShotMm: 230, maxInjVel: 160, servoKw: 12.2 },
+            '550': { ton: 550, screwDia: 68, maxShotMm: 280, maxInjVel: 150, servoKw: 16.5 },
+            '850': { ton: 850, screwDia: 84, maxShotMm: 340, maxInjVel: 140, servoKw: 24.0 },
+            '1300': { ton: 1300, screwDia: 100, maxShotMm: 420, maxInjVel: 130, servoKw: 34.5 }
+        };
+
+        let caeResultMode = 'fill', activeChartMode = 'vp';
+        let isSimulationRunning = false, isSimulationPaused = false, isProbeActive = false, isCoolingVisible = false;
+        let animationFrameId = null, lastFrameTimestamp = 0, realtimeDebounceTimer = null, currentGateSize = 1.6;
+        let calcProfile = { totalInjTime: 1.8, holdTime: 5.2, coolTime: 12.5, minTheoCool: 10.8, dryCycle: 2.4, totalCycleTime: 21.9, clampRequired: 128, maxPressure: 155, gateShearRate: 14200, gateDeltaP: 18.4, gateSealTime: 3.8, partWeightG: 18.2, shotWeightG: 42.6, reqShotStrokeMm: 60.5, sinkMarkIndex: 1.15 };
+
+        let scene, camera, renderer, controls, partMesh = null, coolingPipesGroup = null;
+        let gateObjects = [], gatePositionsWorld = [], gateNormalsWorld = [], defectPins = [];
+        let dynamicSimState = { tProgress: 100, distances: null, weldMask: null, maxDist: 1.0, vertexCount: 0, lastFillVertex: null, weldLineCenter: null };
+        let syscomChartInstance = null;
+
+        window.addEventListener('DOMContentLoaded', () => {
+            initSyscomWaveformChart();
+            initThreeJSViewer();
+            applyResinProperties();
+            loadPresetCAD('phone');
+        });
+
+        function setLayoutMode(mode) {
+            const p = document.getElementById('paramPane'), c = document.getElementById('caePane');
+            p.className = mode === 'cae' ? 'hidden' : (mode === 'param' ? 'w-full flex flex-col bg-[#070a11] z-20' : 'w-full lg:w-1/2 flex flex-col bg-[#070a11] border-r border-[#141d2e] z-20');
+            c.className = mode === 'param' ? 'hidden' : (mode === 'cae' ? 'w-full flex flex-col bg-[#04060a] relative h-full' : 'w-full lg:w-1/2 flex flex-col bg-[#04060a] relative h-full');
+            setTimeout(onThreeResize, 200);
+        }
+
+        function switchHMITab(tabId, btnEl) {
+            document.querySelectorAll('.syscom-tab').forEach(t => { t.classList.remove('active'); t.classList.add('text-slate-400'); });
+            document.querySelectorAll('.hmi-tab-body').forEach(b => b.classList.add('hidden'));
+            if (btnEl) { btnEl.classList.add('active'); btnEl.classList.remove('text-slate-400'); }
+            document.getElementById(tabId).classList.remove('hidden');
+        }
+
+        function showNotification(msg, icon = 'fa-microchip', color = '#00ff9d') {
+            const t = document.getElementById('toast');
+            document.getElementById('toastMsg').innerText = msg;
+            const ic = document.getElementById('toastIcon');
+            ic.className = `fas ${icon}`; ic.style.color = color;
+            t.classList.remove('opacity-0', 'pointer-events-none');
+            setTimeout(() => t.classList.add('opacity-0', 'pointer-events-none'), 2400);
+        }
+
+        function handleRealtimeParamChange() {
+            clearTimeout(realtimeDebounceTimer);
+            realtimeDebounceTimer = setTimeout(() => executeMoldingSimulation(false), 50);
+        }
+
+        function applyResinProperties() {
+            const d = RESIN_DB[document.getElementById('selMaterial').value];
+            document.getElementById('txtResinMFI').innerText = `${d.mfi}g/${d.density}`;
+            document.getElementById('txtResinAlpha').innerText = d.alpha;
+            document.getElementById('txtResinShearLimit').innerText = d.shearLimit.toLocaleString();
+            document.getElementById('txtResinShrink').innerText = d.shrink;
+            document.getElementById('txtResinDrying').innerText = d.drying;
+            document.getElementById('badgeMorphology').innerText = d.morph;
+            document.getElementById('tempNH').value = d.meltTemp;
+            document.getElementById('tempH1').value = d.meltTemp;
+            document.getElementById('tempH2').value = d.meltTemp - 10;
+            document.getElementById('tempH3').value = d.meltTemp - 20;
+            document.getElementById('tempH4').value = d.meltTemp - 35;
+            document.getElementById('tempMoldFix').value = d.moldTemp;
+            document.getElementById('tempMoldMov').value = d.moldTemp;
+            handleRealtimeParamChange();
+        }
+
+        function onGateSizeManualInput(val) {
+            if (isNaN(val) || val <= 0.2) return;
+            currentGateSize = parseFloat(val.toFixed(2));
+            rebuildGateMeshes();
+            handleRealtimeParamChange();
+        }
+        function onGateParameterModified() { rebuildGateMeshes(); handleRealtimeParamChange(); }
+        function applyGatePresetSize(val) { document.getElementById('inpGateSize').value = val; currentGateSize = val; rebuildGateMeshes(); executeMoldingSimulation(true); }
+        function updateGateSpecText() {
+            document.getElementById('txtGateCount').innerText = `${gateObjects.length}x ${document.getElementById('selGateType').value.toUpperCase()} (${currentGateSize}mm)`;
+        }
+
+        function executeMoldingSimulation(notify = true) {
+            const resin = RESIN_DB[document.getElementById('selMaterial').value];
+            const mach = MACHINE_DB[document.getElementById('selMachine').value];
+            const getNum = id => parseFloat(document.getElementById(id).value) || 0;
+            document.getElementById('txtScrewDiaBadge').innerText = `Screw Ø${mach.screwDia}mm`;
+
+            const projArea = getNum('inpProjArea'), cavities = Math.max(1, getNum('inpCavities'));
+            const wallThick = Math.max(0.4, getNum('inpWallThick')), flowLen = Math.max(10, getNum('inpFlowLength'));
+            const runnerFactor = document.getElementById('selRunnerType').value === 'cold' ? 1.18 : 1.0;
+
+            const vVals = [getNum('v_1'), getNum('v_2'), getNum('v_3'), getNum('v_4'), getNum('v_5')];
+            const pVals = [getNum('p_1'), getNum('p_2'), getNum('p_3'), getNum('p_4'), getNum('p_5')];
+            const xVals = [getNum('x_1'), getNum('x_2'), getNum('x_3'), getNum('x_4'), getNum('inpVPSwitch')];
+            const htVals = [getNum('ht_1'), getNum('ht_2'), getNum('ht_3')];
+            const hpVals = [getNum('hp_1'), getNum('hp_2'), getNum('hp_3')];
+
+            const coolTime = getNum('inpCoolTime'), dryCycle = getNum('inpDryCycle');
+            const shotSize = getNum('inpShotSize'), cushion = getNum('inpCushion'), coolantFlow = getNum('inpCoolantFlow');
+
+            const singlePartWeightG = projArea * (wallThick / 10) * 0.62 * resin.solidDensity;
+            const totalShotWeightG = singlePartWeightG * cavities * runnerFactor;
+            const meltShotVolCm3 = totalShotWeightG / resin.density;
+            const screwAreaCm2 = (Math.PI * Math.pow(mach.screwDia / 10, 2)) / 4;
+            const reqTotalShotMm = parseFloat((((meltShotVolCm3 / screwAreaCm2) * 10) + 4.5).toFixed(1));
+            document.getElementById('txtReqShotHint').innerText = `Ideal Shot: ${reqTotalShotMm} mm`;
+
+            const maxBarrelVolCm3 = screwAreaCm2 * (mach.maxShotMm / 10);
+            const barrelUtilPct = (meltShotVolCm3 / maxBarrelVolCm3) * 100;
+
+            let estInjTime = 0, curStroke = shotSize;
+            for (let i = 0; i < 5; i++) {
+                estInjTime += Math.max(0, curStroke - xVals[i]) / Math.max(8, (vVals[i] / 100) * mach.maxInjVel);
+                curStroke = xVals[i];
+            }
+            if (estInjTime < 0.25) estInjTime = 0.65;
+
+            const totalHoldTime = htVals.reduce((a, b) => a + b, 0);
+            const totalCycle = estInjTime + totalHoldTime + coolTime + dryCycle;
+            const residenceTimeMin = (Math.max(1.2, (maxBarrelVolCm3 * 0.55) / Math.max(1, meltShotVolCm3)) * totalCycle) / 60;
+
+            const avgMoldTemp = (getNum('tempMoldFix') + getNum('tempMoldMov')) / 2;
+            const avgBarrelTemp = (getNum('tempNH') + getNum('tempH1') + getNum('tempH2')) / 3;
+            const tempRatio = Math.max(1.15, (avgBarrelTemp - avgMoldTemp) / Math.max(8, resin.ejectTemp - avgMoldTemp));
+            const minTheoCool = ((wallThick * wallThick) / (Math.PI * Math.PI * resin.alpha)) * Math.log((4 / Math.PI) * tempRatio);
+
+            const reynoldsNumber = Math.round(coolantFlow * 835);
+            document.getElementById('badgeReynolds').innerText = reynoldsNumber >= 4000 ? `Re: ${reynoldsNumber} (TURBULENT)` : `Re: ${reynoldsNumber} (LAMINAR)`;
+
+            const numGates = Math.max(1, gateObjects.length), gateDim = currentGateSize;
+            const flowPerGate = ((screwAreaCm2 * 100) * (((vVals[1] + vVals[2] + vVals[3]) / 300) * mach.maxInjVel)) / (numGates * cavities);
+            const gateArea = Math.PI * Math.pow(gateDim / 2, 2);
+            const gateShearRate = (4 * flowPerGate) / (Math.PI * Math.pow(gateDim / 2, 3));
+            const gateVelocity = (flowPerGate / gateArea) / 1000;
+
+            const effectiveVisc = Math.round(resin.viscRef * Math.exp(-0.02 * (avgBarrelTemp - resin.meltTemp)) * Math.pow(Math.max(100, gateShearRate) / 1000, -0.42));
+            const gateDeltaP = Math.round(((4 * effectiveVisc * (gateVelocity * 1000) * 6.5) / Math.pow(gateDim, 2)) * 0.0001);
+            const gateFreezeTime = parseFloat(((Math.pow(gateDim, 2) / (2 * Math.PI * Math.PI * resin.alpha)) * Math.log((4 / Math.PI) * tempRatio)).toFixed(1));
+
+            const ltRatio = flowLen / wallThick, maxPeakInjPressure = Math.max(...pVals);
+            const avgCavityPressure = Math.max(15, (maxPeakInjPressure - Math.min(55, gateDeltaP)) * 0.48);
+            const reqClampingTonnage = Math.round((projArea * cavities * (avgCavityPressure * 0.1) * 1.15) / 9.8);
+            const sinkMarkIndex = parseFloat(Math.max(0.2, resin.shrinkNum * (wallThick / 2) * (1.2 - Math.min(0.6, (hpVals[0] / 100)))).toFixed(2));
+
+            const defects = [];
+            if (gateShearRate > resin.shearLimit) {
+                const rec = parseFloat((gateDim + 0.5).toFixed(1));
+                defects.push({ title: `Gate Shear Overlimit (${Math.round(gateShearRate).toLocaleString()} s⁻¹)`, desc: `Risiko Silver Streak & degradasi polimer.`, type: 'danger', fixLabel: `Gate Ø${rec}mm`, fixAction: () => applyGatePresetSize(rec) });
+            }
+            if (gateFreezeTime > totalHoldTime + 0.4) {
+                const recH = parseFloat((gateFreezeTime + 0.6).toFixed(1));
+                defects.push({ title: `Premature Hold End (Seal ${gateFreezeTime}s > Hold ${totalHoldTime.toFixed(1)}s)`, desc: `Gate belum beku saat holding selesai, memicu Sink Mark.`, type: 'warning', fixLabel: `Hold ${recH}s`, fixAction: () => { document.getElementById('ht_1').value = (recH * 0.5).toFixed(1); document.getElementById('ht_2').value = (recH * 0.5).toFixed(1); executeMoldingSimulation(true); } });
+            }
+            if (coolTime < minTheoCool) {
+                const recC = Math.ceil(minTheoCool);
+                defects.push({ title: `Warpage Risk (Cool ${coolTime}s < Min ${minTheoCool.toFixed(1)}s)`, desc: `Suhu inti part belum stabil saat ejeksi.`, type: 'danger', fixLabel: `Cool ${recC}s`, fixAction: () => { document.getElementById('inpCoolTime').value = recC; executeMoldingSimulation(true); } });
+            }
+            if (reqClampingTonnage > mach.ton) {
+                defects.push({ title: `Mold Flashing (${reqClampingTonnage}T > ${mach.ton}T)`, desc: `Gaya kavitas melebihi tonase mesin.`, type: 'danger', fixLabel: `Upgrade Mesin`, fixAction: () => { document.getElementById('selMachine').value = Object.keys(MACHINE_DB).find(k => MACHINE_DB[k].ton >= reqClampingTonnage) || '1300'; executeMoldingSimulation(true); } });
+            }
+
+            calcProfile = { totalInjTime: estInjTime, holdTime: totalHoldTime, coolTime, minTheoCool, dryCycle, totalCycleTime: totalCycle, clampRequired: reqClampingTonnage, maxPressure: maxPeakInjPressure, gateShearRate, gateDeltaP, gateSealTime: gateFreezeTime, partWeightG: singlePartWeightG, shotWeightG: totalShotWeightG, reqShotStrokeMm: reqTotalShotMm, sinkMarkIndex };
+
+            document.getElementById('resCycleTime').innerText = `${totalCycle.toFixed(1)} s`;
+            document.getElementById('resClampReq').innerText = `${reqClampingTonnage} T`;
+            document.getElementById('resGateDeltaP').innerText = `${gateDeltaP} MPa`;
+            document.getElementById('resGateFreeze').innerText = `${gateFreezeTime} s`;
+            document.getElementById('headerMeltStatus').innerText = `${avgBarrelTemp.toFixed(0)}°C (${residenceTimeMin.toFixed(1)}m)`;
+            document.getElementById('headerClampStatus').innerText = `${reqClampingTonnage}T / ${mach.ton}T`;
+            document.getElementById('headerGateShear').innerText = `${Math.round(gateShearRate).toLocaleString()} s⁻¹`;
+            document.getElementById('headerShotWeight').innerText = `${totalShotWeightG.toFixed(1)}g (${barrelUtilPct.toFixed(0)}%)`;
+
+            document.getElementById('sciLtRatio').innerText = `${ltRatio.toFixed(1)} : 1`;
+            document.getElementById('sciBarrelUtil').innerText = `${barrelUtilPct.toFixed(1)} %`;
+            document.getElementById('sciResidenceTime').innerText = `${residenceTimeMin.toFixed(1)} min`;
+            document.getElementById('sciMinCool').innerText = `${minTheoCool.toFixed(1)} s`;
+            document.getElementById('sciEffVisc').innerText = `${effectiveVisc} Pa·s`;
+            document.getElementById('sciSinkIndex').innerText = `${sinkMarkIndex} %`;
+
+            const batchQty = Math.max(1, getNum('inpBatchQty')), partsPerHour = (3600 / totalCycle) * cavities;
+            const totalCostPerPart = (((totalShotWeightG / cavities) / 1000) * getNum('inpResinPrice')) + (getNum('inpMachineRate') / partsPerHour);
+            document.getElementById('mesHourlyOutput').innerText = `${Math.round(partsPerHour)} pcs/hr`;
+            document.getElementById('mesPartWt').innerText = `${singlePartWeightG.toFixed(1)} g`;
+            document.getElementById('mesTotalResinKg').innerText = `${((batchQty / cavities) * (totalShotWeightG / 1000)).toFixed(1)} kg`;
+            document.getElementById('mesLeadTime').innerText = `${(batchQty / partsPerHour).toFixed(1)} hrs`;
+            document.getElementById('mesCostPerPart').innerText = `$${totalCostPerPart.toFixed(3)}`;
+            document.getElementById('headerPowerKW').innerText = `${mach.servoKw}kW ($${totalCostPerPart.toFixed(2)})`;
+
+            renderDefectsList(defects);
+            refreshActiveTelemetryChart();
+            updateCAEVertexColors(dynamicSimState.tProgress);
+            if (notify) showNotification("Simulasi Scientific Molding Diperbarui!", "fa-circle-check", "#00ff9d");
+        }
+
+        function renderDefectsList(defects) {
+            const c = document.getElementById('defectsList'), b = document.getElementById('badgeMoldingStatus');
+            c.innerHTML = '';
+            if (defects.length === 0) {
+                b.className = 'px-2 py-0.5 rounded text-[9.5px] font-mono-tech font-bold bg-emerald-950/70 border border-emerald-600 text-emerald-400';
+                b.innerText = 'ZERO-DEFECT WINDOW';
+                c.innerHTML = `<div class="p-2 rounded bg-emerald-950/20 border border-emerald-800/40 text-emerald-300 text-[11px]"><i class="fas fa-circle-check mr-2"></i>Semua parameter sesuai standar Scientific Molding.</div>`;
+            } else {
+                b.className = 'px-2 py-0.5 rounded text-[9.5px] font-mono-tech font-bold bg-rose-950/70 border border-rose-600 text-rose-400';
+                b.innerText = `${defects.length} WARNINGS`;
+                defects.forEach((d, i) => {
+                    const row = document.createElement('div');
+                    row.className = `p-2 rounded border ${d.type === 'danger' ? 'border-rose-800/60 bg-rose-950/25' : 'border-amber-800/60 bg-amber-950/25'} flex items-center justify-between gap-2`;
+                    row.innerHTML = `<div><span class="font-bold text-[11px] text-white block">${d.title}</span><span class="text-[9.5px] text-slate-400">${d.desc}</span></div><button id="fix_${i}" class="px-2 py-1 rounded bg-emerald-500 text-black font-mono-tech font-bold text-[9px] shrink-0"><i class="fas fa-wrench mr-1"></i>${d.fixLabel}</button>`;
+                    c.appendChild(row);
+                    document.getElementById(`fix_${i}`).onclick = d.fixAction;
+                });
+            }
+        }
+
+        function runSmartAutoTune() {
+            applyResinProperties();
+            const idealGate = Math.max(1.6, parseFloat((parseFloat(document.getElementById('inpWallThick').value) * 0.85).toFixed(1)));
+            document.getElementById('inpGateSize').value = idealGate;
+            currentGateSize = idealGate;
+            rebuildGateMeshes();
+            executeMoldingSimulation(false);
+            document.getElementById('inpShotSize').value = calcProfile.reqShotStrokeMm;
+            document.getElementById('inpCoolTime').value = Math.ceil(calcProfile.minTheoCool * 1.15);
+            const recH = Math.max(4.0, parseFloat((calcProfile.gateSealTime + 0.8).toFixed(1)));
+            document.getElementById('ht_1').value = (recH * 0.5).toFixed(1);
+            document.getElementById('ht_2').value = (recH * 0.4).toFixed(1);
+            if (calcProfile.clampRequired > MACHINE_DB[document.getElementById('selMachine').value].ton) {
+                document.getElementById('selMachine').value = Object.keys(MACHINE_DB).find(k => MACHINE_DB[k].ton >= calcProfile.clampRequired) || '850';
+            }
+            executeMoldingSimulation(true);
+            showNotification("AI Auto-Tune Selesai!", "fa-wand-magic-sparkles", "#00ff9d");
+        }
+
+        function initSyscomWaveformChart() {
+            const ctx = document.getElementById('syscomChart').getContext('2d');
+            syscomChartInstance = new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    { label: 'Speed (%)', data: [], borderColor: '#00ff9d', borderWidth: 2, pointRadius: 0, tension: 0.2 },
+                    { label: 'Press (MPa)', data: [], borderColor: '#ffb703', borderWidth: 2, pointRadius: 0, tension: 0.2 }
+                ]},
+                options: { responsive: true, maintainAspectRatio: false, animation: false, plugins: { legend: { labels: { color: '#94a3b8', font: { size: 9 } } } }, scales: { x: { ticks: { color: '#64748b', font: { size: 8 } } }, y: { ticks: { color: '#94a3b8', font: { size: 8 } } } } }
+            });
+        }
+
+        function switchChartMode(m) {
+            activeChartMode = m;
+            ['btnChartVP', 'btnChartVisc', 'btnChartSeal'].forEach(id => document.getElementById(id).className = 'px-2 py-0.5 rounded text-[9px] font-mono-tech font-bold text-slate-400');
+            document.getElementById(m === 'vp' ? 'btnChartVP' : (m === 'viscosity' ? 'btnChartVisc' : 'btnChartSeal')).className = 'px-2 py-0.5 rounded text-[9px] font-mono-tech font-bold bg-emerald-500 text-black';
+            refreshActiveTelemetryChart();
+        }
+
+        function refreshActiveTelemetryChart() {
+            if (!syscomChartInstance) return;
+            const getNum = id => parseFloat(document.getElementById(id).value) || 0;
+            const resin = RESIN_DB[document.getElementById('selMaterial').value];
+            if (activeChartMode === 'vp') {
+                syscomChartInstance.data.labels = ['0.2s', '0.6s', '1.0s', '1.4s', '1.8s (VP)', '3.0s', '4.5s', '6.0s'];
+                syscomChartInstance.data.datasets[0].label = 'Screw Speed (%)';
+                syscomChartInstance.data.datasets[0].data = [getNum('v_1'), getNum('v_2'), getNum('v_3'), getNum('v_4'), getNum('v_5'), 6, 5, 4];
+                syscomChartInstance.data.datasets[1].label = 'Pressure (MPa)';
+                syscomChartInstance.data.datasets[1].data = [getNum('p_1')*0.8, getNum('p_2')*0.9, getNum('p_3'), getNum('p_4'), getNum('p_5'), getNum('hp_1'), getNum('hp_2'), getNum('hp_3')];
+            } else if (activeChartMode === 'viscosity') {
+                const sr = [1000, 3000, 7000, 15000, 30000, 50000];
+                syscomChartInstance.data.labels = sr.map(s => (s/1000)+'k s⁻¹');
+                syscomChartInstance.data.datasets[0].label = 'Viscosity (Pa·s)';
+                syscomChartInstance.data.datasets[0].data = sr.map(s => Math.round(resin.viscRef * Math.pow(s/1000, -0.42)));
+                syscomChartInstance.data.datasets[1].label = 'Shear StressIdx';
+                syscomChartInstance.data.datasets[1].data = sr.map(s => Math.round(45 * Math.pow(s/1000, 0.35)));
+            } else {
+                const ts = [0.5, 1.5, 2.5, 3.5, 4.5, 5.5];
+                syscomChartInstance.data.labels = ts.map(t => t+'s');
+                syscomChartInstance.data.datasets[0].label = 'Part Weight (g)';
+                syscomChartInstance.data.datasets[0].data = ts.map(t => parseFloat((calcProfile.partWeightG * (1 - 0.04 * Math.exp(-t))).toFixed(2)));
+                syscomChartInstance.data.datasets[1].label = 'Cavity Press (MPa)';
+                syscomChartInstance.data.datasets[1].data = ts.map(t => Math.round(75 * Math.exp(-t / calcProfile.gateSealTime)));
+            }
+            syscomChartInstance.update();
+        }
+
+        function initThreeJSViewer() {
+            const container = document.getElementById('threeCanvasWrapper');
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x04060a);
+            camera = new THREE.PerspectiveCamera(45, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.set(0, 80, 140);
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            container.appendChild(renderer.domElement);
+
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+
+            scene.add(new THREE.AmbientLight(0xffffff, 0.75));
+            const dir = new THREE.DirectionalLight(0xffffff, 0.9);
+            dir.position.set(60, 120, 60);
+            scene.add(dir);
+
+            const grid = new THREE.GridHelper(200, 30, 0x142036, 0x0b1220);
+            grid.position.y = -32;
+            scene.add(grid);
+
+            coolingPipesGroup = new THREE.Group();
+            for (let z = -30; z <= 30; z += 20) {
+                const g = new THREE.CylinderGeometry(2.5, 2.5, 90, 12);
+                g.rotateZ(Math.PI / 2);
+                const m = new THREE.MeshStandardMaterial({ color: z < 0 ? 0x00b4d8 : 0xff4d6d });
+                const p1 = new THREE.Mesh(g, m); p1.position.set(0, 16, z);
+                const p2 = new THREE.Mesh(g, m); p2.position.set(0, -16, z);
+                coolingPipesGroup.add(p1, p2);
+            }
+            coolingPipesGroup.visible = false;
+            scene.add(coolingPipesGroup);
+
+            const raycaster = new THREE.Raycaster(), mouse = new THREE.Vector2();
+            renderer.domElement.addEventListener('dblclick', e => {
+                if (!partMesh) return;
+                const r = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+                mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObject(partMesh);
+                if (hits.length > 0) addInjectionGate(hits[0].point, hits[0].face.normal);
+            });
+
+            renderer.domElement.addEventListener('pointermove', e => {
+                const tt = document.getElementById('probeTooltip');
+                if (!isProbeActive || !partMesh || !dynamicSimState.distances) { tt.classList.add('hidden'); return; }
+                const r = renderer.domElement.getBoundingClientRect();
+                mouse.x = ((e.clientX - r.left) / r.width) * 2 - 1;
+                mouse.y = -((e.clientY - r.top) / r.height) * 2 + 1;
+                raycaster.setFromCamera(mouse, camera);
+                const hits = raycaster.intersectObject(partMesh);
+                if (hits.length > 0) {
+                    const idx = hits[0].face.a, norm = Math.min(1, dynamicSimState.distances[idx] / dynamicSimState.maxDist);
+                    const resin = RESIN_DB[document.getElementById('selMaterial').value];
+                    tt.classList.remove('hidden');
+                    tt.style.left = (e.clientX + 14) + 'px'; tt.style.top = (e.clientY + 14) + 'px';
+                    document.getElementById('probeNodeId').innerText = '#' + idx;
+                    document.getElementById('probeFillTime').innerText = (norm * calcProfile.totalInjTime).toFixed(2) + ' s';
+                    document.getElementById('probeTemp').innerText = (resin.meltTemp - norm * 16).toFixed(1) + ' °C';
+                    document.getElementById('probePress').innerText = (calcProfile.maxPressure * 0.6 * (1 - norm * 0.7)).toFixed(1) + ' MPa';
+                    document.getElementById('probeShear').innerText = (0.42 * (1 - norm * 0.5)).toFixed(2) + ' MPa';
+                    document.getElementById('probeShrink').innerText = (calcProfile.sinkMarkIndex * (0.9 + norm * 0.3)).toFixed(2) + ' %';
+                } else tt.classList.add('hidden');
+            });
+
+            window.addEventListener('resize', onThreeResize);
+            (function anim() { requestAnimationFrame(anim); controls.update(); renderer.render(scene, camera); updatePinScreenPositions(); })();
+        }
+
+        function onThreeResize() {
+            const c = document.getElementById('threeCanvasWrapper');
+            if (!c || !renderer) return;
+            camera.aspect = c.clientWidth / c.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(c.clientWidth, c.clientHeight);
+        }
+
+        function toggleCoolingPipes() {
+            isCoolingVisible = !isCoolingVisible;
+            coolingPipesGroup.visible = isCoolingVisible;
+            showNotification(isCoolingVisible ? "Saluran Cooling 3D Aktif" : "Saluran Cooling Disembunyikan", "fa-snowflake", "#00e5ff");
+        }
+
+        function toggleProbeMode() {
+            isProbeActive = !isProbeActive;
+            document.getElementById('btnProbeMode').classList.toggle('border-cyan-400', isProbeActive);
+            showNotification(isProbeActive ? "Mode Node Probe Aktif: Arahkan kursor ke Part 3D" : "Mode Probe Nonaktif", "fa-crosshairs", "#00e5ff");
+        }
+
+        function toggleMeshWireframe() { if (partMesh) partMesh.material.wireframe = !partMesh.material.wireframe; }
+
+        function loadPresetCAD(type) {
+            if (partMesh) { scene.remove(partMesh); partMesh.geometry.dispose(); partMesh = null; }
+            resetGates();
+            let geo;
+            if (type === 'phone' || type === 'bracket') {
+                const s = new THREE.Shape(), w = type === 'phone' ? 42 : 55, h = 80;
+                s.moveTo(-w/2, -h/2); s.lineTo(w/2, -h/2); s.lineTo(w/2, h/2); s.lineTo(-w/2, h/2); s.closePath();
+                geo = new THREE.ExtrudeGeometry(s, { depth: type === 'phone' ? 2.5 : 5, bevelEnabled: true, bevelThickness: 0.8, bevelSize: 0.8, steps: 2 });
+            } else if (type === 'gear') {
+                geo = new THREE.TorusKnotGeometry(24, 6.5, 90, 16);
+            } else if (type === 'medical') {
+                geo = new THREE.CylinderGeometry(14, 14, 75, 32, 24, true);
+            } else {
+                geo = new THREE.CylinderGeometry(26, 18, 55, 36, 20, true);
+            }
+            geo.center();
+            setupPartMesh(geo);
+            setCADView('fit');
+            const box = new THREE.Box3().setFromObject(partMesh);
+            addInjectionGate(new THREE.Vector3(0, box.max.y * 0.8, box.max.z), new THREE.Vector3(0, 0, 1));
+        }
+
+        function handleCustomCADUpload(e) {
+            const file = e.target.files[0]; if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase(), reader = new FileReader();
+            reader.onload = ev => {
+                let geo = ext === 'stl' ? new THREE.STLLoader().parse(ev.target.result) : null;
+                if (ext === 'obj') new THREE.OBJLoader().parse(ev.target.result).traverse(c => { if (c.isMesh && !geo) geo = c.geometry; });
+                if (geo) {
+                    if (partMesh) scene.remove(partMesh);
+                    resetGates(); geo.computeVertexNormals(); geo.center(); setupPartMesh(geo); setCADView('fit');
+                    const b = new THREE.Box3().setFromObject(partMesh);
+                    addInjectionGate(new THREE.Vector3(0, b.max.y, 0), new THREE.Vector3(0, 1, 0));
+                }
+            };
+            if (ext === 'stl') reader.readAsArrayBuffer(file); else reader.readAsText(file);
+        }
+
+        function setupPartMesh(geo) {
+            const count = geo.attributes.position.count;
+            geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(count * 3), 3));
+            partMesh = new THREE.Mesh(geo, new THREE.MeshPhysicalMaterial({ vertexColors: true, roughness: 0.25, metalness: 0.1, clearcoat: 0.6, side: THREE.DoubleSide }));
+            geo.computeBoundingBox();
+            const b = geo.boundingBox, maxD = Math.max(b.max.x - b.min.x, b.max.y - b.min.y, b.max.z - b.min.z);
+            if (maxD > 0) partMesh.scale.setScalar(80 / maxD);
+            scene.add(partMesh);
+        }
+
+        function createGateMesh(type, size) {
+            const s = Math.max(0.4, size);
+            const geo = type === 'edge' ? new THREE.BoxGeometry(s * 2.2, 12, s) : new THREE.CylinderGeometry(s * 0.9, s * 0.4, 14, 16);
+            return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x00e5ff, emissive: 0x003355 }));
+        }
+
+        function addInjectionGate(pos, normal) {
+            const n = normal ? normal.clone().normalize() : new THREE.Vector3(0, 1, 0);
+            const m = createGateMesh(document.getElementById('selGateType').value, currentGateSize);
+            m.position.copy(pos);
+            m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), n);
+            m.translateY(6);
+            scene.add(m);
+            gateObjects.push(m); gatePositionsWorld.push(pos.clone()); gateNormalsWorld.push(n);
+            updateGateSpecText(); prepareDistanceFields(); executeMoldingSimulation(false);
+        }
+
+        function rebuildGateMeshes() {
+            gateObjects.forEach(g => scene.remove(g));
+            gateObjects = [];
+            const t = document.getElementById('selGateType').value;
+            gatePositionsWorld.forEach((pos, i) => {
+                const m = createGateMesh(t, currentGateSize);
+                m.position.copy(pos);
+                m.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), gateNormalsWorld[i]);
+                m.translateY(6);
+                scene.add(m); gateObjects.push(m);
+            });
+            updateGateSpecText();
+        }
+
+        function resetGates() {
+            gateObjects.forEach(g => scene.remove(g));
+            gateObjects = []; gatePositionsWorld = []; gateNormalsWorld = [];
+            updateGateSpecText(); clearPinsOverlay();
+        }
+
+        function prepareDistanceFields() {
+            if (!partMesh || gatePositionsWorld.length === 0) return;
+            const posAttr = partMesh.geometry.attributes.position, count = posAttr.count;
+            dynamicSimState.vertexCount = count;
+            dynamicSimState.distances = new Float32Array(count);
+            dynamicSimState.weldMask = new Uint8Array(count);
+            dynamicSimState.maxDist = 0.001;
+
+            const localGates = gatePositionsWorld.map(gw => partMesh.worldToLocal(gw.clone()));
+            let furthestIdx = 0, weldSum = new THREE.Vector3(), weldCount = 0;
+
+            for (let i = 0; i < count; i++) {
+                const vx = posAttr.getX(i), vy = posAttr.getY(i), vz = posAttr.getZ(i);
+                let d1 = Infinity, d2 = Infinity;
+                for (let g of localGates) {
+                    const d = Math.hypot(vx - g.x, vy - g.y, vz - g.z);
+                    if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+                }
+                dynamicSimState.distances[i] = d1;
+                if (localGates.length > 1 && Math.abs(d1 - d2) < 1.8) {
+                    dynamicSimState.weldMask[i] = 1;
+                    weldSum.add(new THREE.Vector3(vx, vy, vz)); weldCount++;
+                }
+                if (d1 > dynamicSimState.maxDist) { dynamicSimState.maxDist = d1; furthestIdx = i; }
+            }
+            dynamicSimState.lastFillVertex = new THREE.Vector3(posAttr.getX(furthestIdx), posAttr.getY(furthestIdx), posAttr.getZ(furthestIdx));
+            dynamicSimState.weldLineCenter = weldCount > 0 ? weldSum.divideScalar(weldCount) : null;
+        }
+
+        function updateCAEVertexColors(progress) {
+            if (!partMesh || !dynamicSimState.distances) return;
+            const cols = partMesh.geometry.attributes.color, front = dynamicSimState.maxDist * (progress / 100);
+            for (let i = 0; i < dynamicSimState.vertexCount; i++) {
+                const d = dynamicSimState.distances[i];
+                if (d <= front) {
+                    if (dynamicSimState.weldMask && dynamicSimState.weldMask[i] === 1 && progress >= 95) {
+                        cols.setXYZ(i, 1.0, 0.1, 0.3);
+                    } else {
+                        const rgb = getCAEColorRamp(d / dynamicSimState.maxDist, caeResultMode);
+                        cols.setXYZ(i, rgb.r, rgb.g, rgb.b);
+                    }
+                } else cols.setXYZ(i, 0.08, 0.11, 0.18);
+            }
+            cols.needsUpdate = true;
+        }
+
+        function getCAEColorRamp(t, mode) {
+            if (mode === 'temp') t = 1 - t * 0.7;
+            else if (mode === 'press' || mode === 'shear') t = 1 - t;
+            else if (mode === 'sink') t = 0.3 + (1 - t) * 0.6;
+            if (t < 0.25) return { r: 0, g: t * 4, b: 1 };
+            if (t < 0.5) return { r: 0, g: 1, b: 1 - (t - 0.25) * 4 };
+            if (t < 0.75) return { r: (t - 0.5) * 4, g: 1, b: 0 };
+            return { r: 1, g: 1 - (t - 0.75) * 4, b: 0 };
+        }
+
+        function setCAEResultMode(mode) {
+            caeResultMode = mode;
+            const map = { fill: 'btnModeFill', temp: 'btnModeTemp', press: 'btnModePress', shear: 'btnModeShear', sink: 'btnModeSink', warp: 'btnModeWarp' };
+            Object.values(map).forEach(id => document.getElementById(id).className = 'px-2 py-1 rounded text-[9px] font-bold font-mono-tech text-slate-400');
+            document.getElementById(map[mode]).className = 'px-2 py-1 rounded text-[9px] font-bold font-mono-tech bg-emerald-500 text-black';
+            updateCAEVertexColors(dynamicSimState.tProgress);
+        }
+
+        function toggleCAEPlayPause() {
+            if (isSimulationRunning) {
+                isSimulationPaused = !isSimulationPaused;
+                document.getElementById('iconPlay').className = isSimulationPaused ? 'fas fa-play' : 'fas fa-pause';
+                if (!isSimulationPaused) { lastFrameTimestamp = performance.now(); runCycleLoop(); }
+            } else {
+                isSimulationRunning = true; isSimulationPaused = false; dynamicSimState.tProgress = 0;
+                lastFrameTimestamp = performance.now();
+                document.getElementById('iconPlay').className = 'fas fa-pause';
+                clearPinsOverlay(); runCycleLoop();
+            }
+        }
+
+        function restartCAESimulation() {
+            isSimulationRunning = false; isSimulationPaused = false;
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            userScrubTimeline(0);
+            document.getElementById('iconPlay').className = 'fas fa-play';
+            clearPinsOverlay();
+        }
+
+        function runCycleLoop(now = performance.now()) {
+            if (!isSimulationRunning || isSimulationPaused) return;
+            const dt = (now - lastFrameTimestamp) / 1000; lastFrameTimestamp = now;
+            dynamicSimState.tProgress += (dt / Math.max(5, calcProfile.totalCycleTime)) * 280;
+            if (dynamicSimState.tProgress >= 100) { dynamicSimState.tProgress = 100; finishMoldingCycle(); }
+            userScrubTimeline(dynamicSimState.tProgress);
+            if (dynamicSimState.tProgress < 100) animationFrameId = requestAnimationFrame(runCycleLoop);
+        }
+
+        function userScrubTimeline(val) {
+            dynamicSimState.tProgress = val;
+            document.getElementById('simTimeline').value = val;
+            document.getElementById('txtTimelinePercent').innerText = val.toFixed(0) + '%';
+            updateCAEVertexColors(val);
+            document.getElementById('hudScrewBar').style.left = Math.max(10, 65 - val * 0.5) + '%';
+            document.getElementById('hudSimTime').innerText = ((val / 100) * calcProfile.totalCycleTime).toFixed(2) + ' s';
+        }
+
+        function finishMoldingCycle() {
+            isSimulationRunning = false;
+            document.getElementById('iconPlay').className = 'fas fa-rotate-left';
+            if (dynamicSimState.lastFillVertex && partMesh) {
+                addCAEPin(partMesh.localToWorld(dynamicSimState.lastFillVertex.clone()), "AIR TRAP / VENTS", "Titik akhir pengisian", "#00e5ff");
+            }
+            if (dynamicSimState.weldLineCenter && partMesh) {
+                addCAEPin(partMesh.localToWorld(dynamicSimState.weldLineCenter.clone()), "WELD LINE", "Pertemuan 2 aliran", "#ff3366");
+            }
+        }
+
+        function addCAEPin(posWorld, title, desc, color) {
+            const el = document.createElement('div');
+            el.className = 'cae-pin font-mono-tech'; el.style.color = color;
+            el.innerHTML = `<div class="bg-[#0b121f]/95 border border-[#1e2f4d] p-1.5 rounded shadow-xl text-white" style="border-top:2px solid ${color}"><div class="text-[8.5px] font-bold">${title}</div><div class="text-[7.5px] text-slate-300">${desc}</div></div><div class="cae-pin-dot"></div>`;
+            document.getElementById('pinsOverlay').appendChild(el);
+            defectPins.push({ element: el, pos3D: posWorld });
+        }
+
+        function updatePinScreenPositions() {
+            if (!defectPins.length || !renderer) return;
+            const hw = renderer.domElement.clientWidth / 2, hh = renderer.domElement.clientHeight / 2;
+            defectPins.forEach(pin => {
+                const p = pin.pos3D.clone().project(camera);
+                pin.element.style.left = ((p.x * hw) + hw) + 'px';
+                pin.element.style.top = (-(p.y * hh) + hh) + 'px';
+            });
+        }
+
+        function clearPinsOverlay() { document.getElementById('pinsOverlay').innerHTML = ''; defectPins = []; }
+
+        function setCADView(v) {
+            if (!partMesh) return;
+            const b = new THREE.Box3().setFromObject(partMesh), c = b.getCenter(new THREE.Vector3());
+            if (v === 'iso') camera.position.set(c.x + 85, c.y + 75, c.z + 95);
+            else if (v === 'top') camera.position.set(c.x, c.y + 130, c.z);
+            else camera.position.set(c.x, c.y + 45, c.z + 125);
+            controls.target.copy(c); controls.update();
+        }
+
+        function toggleSetupSheetModal(show) {
+            const m = document.getElementById('setupSheetModal');
+            m.classList.toggle('hidden', !show); m.classList.toggle('flex', show);
+            if (show) {
+                document.getElementById('setupSheetContent').innerHTML = `
+                    <div class="grid grid-cols-2 gap-3 p-3 rounded bg-[#080d16] border border-[#182338]">
+                        <div><span class="text-slate-500 block">Machine / Resin:</span><span class="text-emerald-400 font-bold">JSW J${document.getElementById('selMachine').value}AD / ${document.getElementById('selMaterial').value}</span></div>
+                        <div><span class="text-slate-500 block">Cycle / Clamp Required:</span><span class="text-white font-bold">${calcProfile.totalCycleTime.toFixed(1)} s / ${calcProfile.clampRequired} Ton</span></div>
+                        <div><span class="text-slate-500 block">Shot Size / V-P Switch:</span><span class="text-cyan-400 font-bold">${document.getElementById('inpShotSize').value} mm / ${document.getElementById('inpVPSwitch').value} mm</span></div>
+                        <div><span class="text-slate-500 block">Gate Seal / Shear Rate:</span><span class="text-amber-400 font-bold">${calcProfile.gateSealTime} s / ${Math.round(calcProfile.gateShearRate).toLocaleString()} s⁻¹</span></div>
+                    </div>`;
+            }
+        }
+
+        function downloadRecipeJSON() {
+            const blob = new Blob([JSON.stringify(calcProfile, null, 2)], { type: 'application/json' });
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'JSW_SYSCOM_Setup.json'; a.click();
+        }
+    </script>
+</body>
+</html>
